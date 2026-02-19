@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+**SmartPres** – Smart Presensi. A [Next.js](https://nextjs.org) app for presensi and attendance history (CloudLab Amikom).
 
 ## Getting Started
 
