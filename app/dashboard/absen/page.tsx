@@ -55,8 +55,8 @@ export default function AbsenPage() {
     setPasteError(null);
     try {
       const text = await navigator.clipboard.readText();
-      const trimmed = text.trim();
-      if (trimmed) setManualToken(trimmed);
+      const extracted = extractTokenFromDecoded(text);
+      if (extracted) setManualToken(extracted);
       else setPasteError("Clipboard kosong atau bukan teks.");
     } catch {
       setPasteError("Tidak dapat membaca clipboard. Izinkan akses atau tempel manual (Ctrl+V).");
@@ -65,7 +65,7 @@ export default function AbsenPage() {
 
   const submitToken = useCallback(
     async (token: string) => {
-      const t = token.trim();
+      const t = extractTokenFromDecoded(token);
       if (!t) {
         setMessage({ type: "error", text: "Token tidak boleh kosong." });
         return;
