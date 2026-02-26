@@ -12,10 +12,6 @@ export default function LoginPage() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      setChecking(false);
-      return;
-    }
     const sessionId = window.localStorage.getItem("sessionId");
     const sessionCookie = window.localStorage.getItem("sessionCookie");
     if (sessionId || sessionCookie) {
@@ -40,15 +36,14 @@ export default function LoginPage() {
         setError(data?.message ?? data?.error ?? "Login failed");
         return;
       }
-      // API returns 200 with HTML; we parse to { success, message?, sessionId? }
       if (!data.success) {
         setError(data?.message ?? "Email atau password salah!");
         return;
       }
-      if (typeof window !== "undefined") {
-        if (typeof data.sessionId === "string") window.localStorage.setItem("sessionId", data.sessionId);
-        if (typeof data.sessionCookie === "string") window.localStorage.setItem("sessionCookie", data.sessionCookie);
-      }
+      if (typeof data.sessionId === "string")
+        window.localStorage.setItem("sessionId", data.sessionId);
+      if (typeof data.sessionCookie === "string")
+        window.localStorage.setItem("sessionCookie", data.sessionCookie);
       router.push("/dashboard");
     } catch {
       setError("Network error. Please try again.");

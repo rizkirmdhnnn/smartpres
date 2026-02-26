@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSession } from "@/app/hooks/useSession";
 
 type SummaryProfile = {
   name: string;
@@ -28,12 +28,21 @@ function formatDateDisplay(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function findSummaryByLabel(summary: Record<string, string>, label: string): string | null {
-  const key = Object.keys(summary).find((k) => k.trim().toLowerCase() === label.toLowerCase());
+function findSummaryByLabel(
+  summary: Record<string, string>,
+  label: string
+): string | null {
+  const key = Object.keys(summary).find(
+    (k) => k.trim().toLowerCase() === label.toLowerCase()
+  );
   return key ? summary[key] : null;
 }
 
-function getSummaryFromData(data: HistoryState, startDate: string, endDate: string) {
+function getSummaryFromData(
+  data: HistoryState,
+  startDate: string,
+  endDate: string
+) {
   const empty = {
     hadir: 0,
     terlambat: 0,
@@ -46,10 +55,13 @@ function getSummaryFromData(data: HistoryState, startDate: string, endDate: stri
   if (!data) return empty;
 
   const summary = data.summary ?? {};
-  const jamKerjaFromHtml = findSummaryByLabel(summary, "Jam Kerja");
   const hadirFromHtml = findSummaryByLabel(summary, "Hadir");
   const terlambatFromHtml = findSummaryByLabel(summary, "Terlambat");
-  const totalKeterlambatanFromHtml = findSummaryByLabel(summary, "Total Keterlambatan");
+  const totalKeterlambatanFromHtml = findSummaryByLabel(
+    summary,
+    "Total Keterlambatan"
+  );
+  const jamKerjaFromHtml = findSummaryByLabel(summary, "Jam Kerja");
 
   let hadir = 0;
   let terlambat = 0;
@@ -64,73 +76,105 @@ function getSummaryFromData(data: HistoryState, startDate: string, endDate: stri
   }
 
   const headers = data.headers.map((h) => String(h).toLowerCase());
-  const idxKeterlambatan = headers.findIndex((h) => h.includes("keterlambatan") || h.includes("total terlambat"));
+  const idxKeterlambatan = headers.findIndex(
+    (h) => h.includes("keterlambatan") || h.includes("total terlambat")
+  );
   const idxJamKerja = headers.findIndex((h) => h.includes("jam kerja"));
-  const idxNama = headers.findIndex((h) => h.includes("nama") || h === "name");
-  const idxNik = headers.findIndex((h) => h.includes("nik") || h.includes("nip"));
+  const idxNama = headers.findIndex(
+    (h) => h.includes("nama") || h === "name"
+  );
+  const idxNik = headers.findIndex(
+    (h) => h.includes("nik") || h.includes("nip")
+  );
 
   const profile = data.summaryProfile;
   return {
-    hadir: hadirFromHtml != null ? Number(hadirFromHtml) || hadir : hadir,
-    terlambat: terlambatFromHtml != null ? Number(terlambatFromHtml) || terlambat : terlambat,
-    totalKeterlambatan: totalKeterlambatanFromHtml ?? (idxKeterlambatan >= 0 && data.rows[0]?.[idxKeterlambatan] ? data.rows[0][idxKeterlambatan] : "—"),
-    jamKerja: jamKerjaFromHtml ?? (idxJamKerja >= 0 && data.rows[0]?.[idxJamKerja] ? data.rows[0][idxJamKerja] : "—"),
-    name: profile?.name ?? (idxNama >= 0 && data.rows[0]?.[idxNama] ? data.rows[0][idxNama] : "—"),
-    nik: profile?.nik ?? (idxNik >= 0 && data.rows[0]?.[idxNik] ? data.rows[0][idxNik] : "—"),
-    periode: profile?.periode ?? (data.rows.length ? `${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}` : "—"),
+    hadir:
+      hadirFromHtml != null ? Number(hadirFromHtml) || hadir : hadir,
+    terlambat:
+      terlambatFromHtml != null
+        ? Number(terlambatFromHtml) || terlambat
+        : terlambat,
+    totalKeterlambatan:
+      totalKeterlambatanFromHtml ??
+      (idxKeterlambatan >= 0 && data.rows[0]?.[idxKeterlambatan]
+        ? data.rows[0][idxKeterlambatan]
+        : "—"),
+    jamKerja:
+      jamKerjaFromHtml ??
+      (idxJamKerja >= 0 && data.rows[0]?.[idxJamKerja]
+        ? data.rows[0][idxJamKerja]
+        : "—"),
+    name:
+      profile?.name ??
+      (idxNama >= 0 && data.rows[0]?.[idxNama]
+        ? data.rows[0][idxNama]
+        : "—"),
+    nik:
+      profile?.nik ??
+      (idxNik >= 0 && data.rows[0]?.[idxNik]
+        ? data.rows[0][idxNik]
+        : "—"),
+    periode:
+      profile?.periode ??
+      (data.rows.length
+        ? `${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}`
+        : "—"),
   };
 }
 
+function StatusCell({ value }: { value: string }) {
+  const val = String(value).trim().toLowerCase();
+  const isTerlambat = val === "terlambat";
+  const isHadir = val === "hadir";
+  const cellClass = isTerlambat
+    ? "font-medium text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400"
+    : isHadir
+      ? "font-medium text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400"
+      : "text-zinc-900 dark:text-zinc-50";
+  return <td className={`px-4 py-3 ${cellClass}`}>{value}</td>;
+}
+
 export default function HistoryPage() {
-  const router = useRouter();
+  const { getHeaders, clearSession } = useSession();
   const today = new Date();
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [startDate, setStartDate] = useState(formatDateForInput(firstDayOfMonth));
+  const [startDate, setStartDate] = useState(
+    formatDateForInput(firstDayOfMonth)
+  );
   const [endDate, setEndDate] = useState(formatDateForInput(today));
   const [data, setData] = useState<HistoryState>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchHistory = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    const sessionCookie = window.localStorage.getItem("sessionCookie");
-    const sessionId = window.localStorage.getItem("sessionId");
-    if (!sessionCookie && !sessionId) {
-      setError("Sesi tidak ditemukan. Silakan login lagi.");
-      setData(null);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (startDate) params.set("start_date", startDate);
       if (endDate) params.set("end_date", endDate);
-      const headers: Record<string, string> = {};
-      if (sessionCookie) headers["X-Session-Cookie"] = sessionCookie;
-      else if (sessionId) headers["X-Session-Id"] = sessionId;
-      const res = await fetch(`/api/history?${params.toString()}`, { headers });
+      const res = await fetch(`/api/history?${params.toString()}`, {
+        headers: getHeaders(),
+      });
       const json = await res.json();
       if (!res.ok) {
         setError(json?.error ?? "Gagal memuat riwayat");
         setData(null);
-        if (res.status === 401) {
-          window.localStorage.removeItem("sessionId");
-          window.localStorage.removeItem("sessionCookie");
-          router.replace("/login");
-        }
+        if (res.status === 401) clearSession();
         return;
       }
       const headersList = json.headers ?? [];
       const rowsList = json.rows ?? [];
       const colCount = headersList.length;
-      const normalizedRows = colCount > 0
-        ? rowsList.map((row: string[]) => {
-            const arr = [...row];
-            while (arr.length < colCount) arr.push("");
-            return arr.slice(0, colCount);
-          })
-        : rowsList;
+      const normalizedRows =
+        colCount > 0
+          ? rowsList.map((row: string[]) => {
+              const arr = [...row];
+              while (arr.length < colCount) arr.push("");
+              return arr.slice(0, colCount);
+            })
+          : rowsList;
       setData({
         headers: headersList,
         rows: normalizedRows,
@@ -143,11 +187,16 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, router]);
+  }, [startDate, endDate, getHeaders, clearSession]);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  const summaryData = useMemo(
+    () => getSummaryFromData(data, startDate, endDate),
+    [data, startDate, endDate]
+  );
 
   return (
     <div>
@@ -160,7 +209,10 @@ export default function HistoryPage() {
 
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <div>
-          <label htmlFor="start_date" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label
+            htmlFor="start_date"
+            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
             Dari
           </label>
           <input
@@ -172,7 +224,10 @@ export default function HistoryPage() {
           />
         </div>
         <div>
-          <label htmlFor="end_date" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label
+            htmlFor="end_date"
+            className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
             Sampai
           </label>
           <input
@@ -201,101 +256,105 @@ export default function HistoryPage() {
 
       {loading && !data && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Memuat riwayat…</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Memuat riwayat…
+          </p>
         </div>
       )}
 
       {data && (
         <>
+          {/* Summary card */}
           <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            {(() => {
-              const s = getSummaryFromData(data, startDate, endDate);
-              return (
-                <>
-                  <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                    {s.name}
-                  </p>
-                  <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
-                    NIK: {s.nik} | Periode: {s.periode}
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{s.hadir}</p>
-                      <p className="text-xs font-medium text-green-700 dark:text-green-300">Hadir</p>
-                    </div>
-                    <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">{s.terlambat}</p>
-                      <p className="text-xs font-medium text-red-700 dark:text-red-300">Terlambat</p>
-                    </div>
-                    <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
-                      <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">{s.totalKeterlambatan}</p>
-                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Total Keterlambatan</p>
-                    </div>
-                    <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
-                      <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">{s.jamKerja}</p>
-                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Jam Kerja</p>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
+            <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              {summaryData.name}
+            </p>
+            <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+              NIK: {summaryData.nik} | Periode: {summaryData.periode}
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {summaryData.hadir}
+                </p>
+                <p className="text-xs font-medium text-green-700 dark:text-green-300">
+                  Hadir
+                </p>
+              </div>
+              <div className="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                  {summaryData.terlambat}
+                </p>
+                <p className="text-xs font-medium text-red-700 dark:text-red-300">
+                  Terlambat
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
+                <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">
+                  {summaryData.totalKeterlambatan}
+                </p>
+                <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Total Keterlambatan
+                </p>
+              </div>
+              <div className="rounded-lg bg-zinc-100 p-3 dark:bg-zinc-800">
+                <p className="text-lg font-bold text-zinc-800 dark:text-zinc-200">
+                  {summaryData.jamKerja}
+                </p>
+                <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Jam Kerja
+                </p>
+              </div>
+            </div>
           </div>
 
+          {/* Data table */}
           <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          {data.headers.length === 0 && data.rows.length === 0 ? (
-            <p className="p-6 text-center text-zinc-500 dark:text-zinc-400">
-              Tidak ada data untuk rentang tanggal ini.
-            </p>
-          ) : (
-            <table className="w-full min-w-[500px] text-left text-sm">
-              {data.headers.length > 0 && (
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
-                    {data.headers.map((h, i) => (
-                      <th key={i} className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-              )}
-              <tbody>
-                {data.rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={data.headers.length || 1}
-                      className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400"
-                    >
-                      Tidak ada data untuk rentang tanggal ini.
-                    </td>
-                  </tr>
-                ) : (
-                  data.rows.map((row, ri) => (
-                    <tr
-                      key={ri}
-                      className="border-b border-zinc-100 last:border-0 dark:border-zinc-800"
-                    >
-                      {row.map((cell, ci) => {
-                        const val = String(cell).trim().toLowerCase();
-                        const isTerlambat = val === "terlambat";
-                        const isHadir = val === "hadir";
-                        const cellClass = isTerlambat
-                          ? "font-medium text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400"
-                          : isHadir
-                            ? "font-medium text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400"
-                            : "text-zinc-900 dark:text-zinc-50";
-                        return (
-                          <td key={ci} className={`px-4 py-3 ${cellClass}`}>
-                            {cell}
-                          </td>
-                        );
-                      })}
+            {data.headers.length === 0 && data.rows.length === 0 ? (
+              <p className="p-6 text-center text-zinc-500 dark:text-zinc-400">
+                Tidak ada data untuk rentang tanggal ini.
+              </p>
+            ) : (
+              <table className="w-full min-w-[500px] text-left text-sm">
+                {data.headers.length > 0 && (
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
+                      {data.headers.map((h, i) => (
+                        <th
+                          key={i}
+                          className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300"
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))
+                  </thead>
                 )}
-              </tbody>
-            </table>
-          )}
+                <tbody>
+                  {data.rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={data.headers.length || 1}
+                        className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400"
+                      >
+                        Tidak ada data untuk rentang tanggal ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    data.rows.map((row, ri) => (
+                      <tr
+                        key={ri}
+                        className="border-b border-zinc-100 last:border-0 dark:border-zinc-800"
+                      >
+                        {row.map((cell, ci) => (
+                          <StatusCell key={ci} value={cell} />
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </>
       )}

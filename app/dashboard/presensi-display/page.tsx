@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { FullscreenIcon, CloseIcon } from "@/app/components/Icons";
 
 const FALLBACK_COUNTDOWN = 15;
+const SSE_RECONNECT_DELAY = 3000;
 
 type AttendanceRecord = Record<string, string>;
 
@@ -15,12 +17,113 @@ function getField(record: AttendanceRecord, ...keys: string[]): string {
 }
 
 const field = {
-  name: (r: AttendanceRecord) => getField(r, "nama_lengkap", "nama", "name", "full_name"),
-  shift: (r: AttendanceRecord) => getField(r, "shift", "shift_name", "shift_kerja"),
-  jamMasuk: (r: AttendanceRecord) => getField(r, "jam_masuk", "check_in", "waktu_masuk", "waktu", "jam", "time"),
-  jamKeluar: (r: AttendanceRecord) => getField(r, "jam_keluar", "check_out", "waktu_keluar"),
-  status: (r: AttendanceRecord) => getField(r, "status_text", "status", "keterangan"),
+  name: (r: AttendanceRecord) =>
+    getField(r, "nama_lengkap", "nama", "name", "full_name"),
+  shift: (r: AttendanceRecord) =>
+    getField(r, "shift", "shift_name", "shift_kerja"),
+  jamMasuk: (r: AttendanceRecord) =>
+    getField(r, "jam_masuk", "check_in", "waktu_masuk", "waktu", "jam", "time"),
+  jamKeluar: (r: AttendanceRecord) =>
+    getField(r, "jam_keluar", "check_out", "waktu_keluar"),
+  status: (r: AttendanceRecord) =>
+    getField(r, "status_text", "status", "keterangan"),
 };
+
+function QRSection({
+  token,
+  tokenLoading,
+  tokenError,
+  countdown,
+  copySuccess,
+  isFullscreen,
+  onFetchToken,
+  onCopyToken,
+}: {
+  token: string | null;
+  tokenLoading: boolean;
+  tokenError: string | null;
+  countdown: number;
+  copySuccess: boolean;
+  isFullscreen: boolean;
+  onFetchToken: () => void;
+  onCopyToken: () => void;
+}) {
+  const qrSize = isFullscreen ? 320 : 200;
+  return (
+    <section className="flex flex-col items-center gap-4 self-start rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <h2 className="self-start text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        QR Presensi
+      </h2>
+      {tokenLoading && !token && (
+        <div
+          className="flex items-center justify-center rounded-lg border-2 border-zinc-200 bg-white dark:border-zinc-700 dark:bg-white"
+          style={{ width: qrSize, height: qrSize }}
+        >
+          <p className="text-xs text-zinc-400">Memuat QR…</p>
+        </div>
+      )}
+      {tokenError && !token && (
+        <div
+          className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/30"
+          style={{ width: qrSize, height: qrSize }}
+        >
+          <p className="text-xs text-red-600 dark:text-red-400">
+            {tokenError}
+          </p>
+          <button
+            type="button"
+            onClick={onFetchToken}
+            className="text-xs font-medium text-red-700 underline dark:text-red-300"
+          >
+            Coba lagi
+          </button>
+        </div>
+      )}
+      {token && (
+        <div className="rounded-lg border-2 border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-white">
+          <QRCodeSVG
+            value={token}
+            size={qrSize}
+            level="M"
+            bgColor="#ffffff"
+            fgColor="#18181b"
+            includeMargin={false}
+          />
+        </div>
+      )}
+      {token && (
+        <div className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+          <span className="font-mono">{countdown}s</span>
+          <span>sampai QR berikutnya</span>
+        </div>
+      )}
+      <div className="w-full space-y-1">
+        <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          Token
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            readOnly
+            value={token ?? "—"}
+            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+          />
+          <button
+            type="button"
+            onClick={onCopyToken}
+            disabled={!token}
+            className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {copySuccess ? "Tersalin" : "Salin"}
+          </button>
+        </div>
+      </div>
+      <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+        Scan QR code atau salin token untuk presensi
+      </p>
+    </section>
+  );
+}
 
 export default function PresensiDisplayPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -29,7 +132,9 @@ export default function PresensiDisplayPage() {
   const [tokenLoading, setTokenLoading] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [sseStatus, setSseStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const [sseStatus, setSseStatus] = useState<
+    "connecting" | "connected" | "error"
+  >("connecting");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
@@ -45,11 +150,11 @@ export default function PresensiDisplayPage() {
         return;
       }
       setToken(json.token);
-
       if (json.expired_at) {
-        const expMs = new Date(json.expired_at).getTime();
-        const nowMs = Date.now();
-        const diff = Math.max(1, Math.round((expMs - nowMs) / 1000));
+        const diff = Math.max(
+          1,
+          Math.round((new Date(json.expired_at).getTime() - Date.now()) / 1000)
+        );
         setCountdown(diff > 0 && diff < 120 ? diff : FALLBACK_COUNTDOWN);
       } else {
         setCountdown(FALLBACK_COUNTDOWN);
@@ -79,31 +184,41 @@ export default function PresensiDisplayPage() {
     return () => clearInterval(interval);
   }, [tokenLoading, tokenError, fetchToken]);
 
+  // SSE with auto-reconnect
   useEffect(() => {
-    setSseStatus("connecting");
-    const es = new EventSource("/api/presensi-stream");
-    eventSourceRef.current = es;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let es: EventSource;
 
-    es.addEventListener("presensi_update", (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (Array.isArray(data)) {
-          setAttendance(data);
+    function connect() {
+      setSseStatus("connecting");
+      es = new EventSource("/api/presensi-stream");
+      eventSourceRef.current = es;
+
+      es.addEventListener("presensi_update", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data)) setAttendance(data);
+        } catch {
+          /* ignore parse errors */
         }
-      } catch {
-        // ignore parse errors
-      }
-      setSseStatus("connected");
-    });
+        setSseStatus("connected");
+      });
 
-    es.onopen = () => setSseStatus("connected");
+      es.onopen = () => setSseStatus("connected");
 
-    es.onerror = () => {
-      setSseStatus("error");
-    };
+      es.onerror = () => {
+        setSseStatus("error");
+        es.close();
+        eventSourceRef.current = null;
+        reconnectTimer = setTimeout(connect, SSE_RECONNECT_DELAY);
+      };
+    }
+
+    connect();
 
     return () => {
-      es.close();
+      clearTimeout(reconnectTimer);
+      es?.close();
       eventSourceRef.current = null;
     };
   }, []);
@@ -136,9 +251,9 @@ export default function PresensiDisplayPage() {
   }, []);
 
   useEffect(() => {
-    const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
   return (
@@ -163,16 +278,12 @@ export default function PresensiDisplayPage() {
         >
           {isFullscreen ? (
             <>
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <CloseIcon className="h-5 w-5" />
               Keluar fullscreen
             </>
           ) : (
             <>
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
+              <FullscreenIcon className="h-5 w-5" />
               Fullscreen
             </>
           )}
@@ -180,86 +291,17 @@ export default function PresensiDisplayPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left — QR (height fits content) */}
-        <section className="flex flex-col items-center gap-4 self-start rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="self-start text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            QR Presensi
-          </h2>
-          {(() => {
-            const qrSize = isFullscreen ? 320 : 200;
-            return (
-              <>
-                {tokenLoading && !token && (
-                  <div
-                    className="flex items-center justify-center rounded-lg border-2 border-zinc-200 bg-white dark:border-zinc-700 dark:bg-white"
-                    style={{ width: qrSize, height: qrSize }}
-                  >
-                    <p className="text-xs text-zinc-400">Memuat QR…</p>
-                  </div>
-                )}
-                {tokenError && !token && (
-                  <div
-                    className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/30"
-                    style={{ width: qrSize, height: qrSize }}
-                  >
-                    <p className="text-xs text-red-600 dark:text-red-400">{tokenError}</p>
-                    <button
-                      type="button"
-                      onClick={fetchToken}
-                      className="text-xs font-medium text-red-700 underline dark:text-red-300"
-                    >
-                      Coba lagi
-                    </button>
-                  </div>
-                )}
-                {token && (
-                  <div className="rounded-lg border-2 border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-white">
-                    <QRCodeSVG
-                      value={token}
-                      size={qrSize}
-                      level="M"
-                      bgColor="#ffffff"
-                      fgColor="#18181b"
-                      includeMargin={false}
-                    />
-                  </div>
-                )}
-              </>
-            );
-          })()}
-          {token && (
-            <div className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2.5 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              <span className="font-mono">{countdown}s</span>
-              <span>sampai QR berikutnya</span>
-            </div>
-          )}
-          <div className="w-full space-y-1">
-            <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Token
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                readOnly
-                value={token ?? "—"}
-                className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-1.5 font-mono text-xs text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
-              />
-              <button
-                type="button"
-                onClick={handleCopyToken}
-                disabled={!token}
-                className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {copySuccess ? "Tersalin" : "Salin"}
-              </button>
-            </div>
-          </div>
-          <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
-            Scan QR code atau salin token untuk presensi
-          </p>
-        </section>
+        <QRSection
+          token={token}
+          tokenLoading={tokenLoading}
+          tokenError={tokenError}
+          countdown={countdown}
+          copySuccess={copySuccess}
+          isFullscreen={isFullscreen}
+          onFetchToken={fetchToken}
+          onCopyToken={handleCopyToken}
+        />
 
-        {/* Right — Table (2/3) */}
         <section className="rounded-xl border border-zinc-200 bg-white lg:col-span-2 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-700">
             <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -288,24 +330,16 @@ export default function PresensiDisplayPage() {
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    No
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    Nama
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    Shift
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    Jam Masuk
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    Jam Keluar
-                  </th>
-                  <th className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">
-                    Status
-                  </th>
+                  {["No", "Nama", "Shift", "Jam Masuk", "Jam Keluar", "Status"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300"
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>

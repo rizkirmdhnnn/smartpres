@@ -1,11 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSession } from "@/app/hooks/useSession";
+import { Alert } from "@/app/components/Alert";
 
 const SCANNER_ID = "qr-scanner-root";
 
 type StopScannerCallback = () => void;
+
+declare global {
+  interface Window {
+    __smartpresStopScanner?: (onDone: () => void) => void;
+  }
+}
 
 function safeStopScanner(
   ref: React.MutableRefObject<{ stop: () => Promise<void> } | null>,
@@ -19,15 +26,12 @@ function safeStopScanner(
   ref.current = null;
   const done = () => onDone?.();
   try {
-    scanner.stop().catch(() => {}).finally(done);
+    scanner
+      .stop()
+      .catch(() => {})
+      .finally(done);
   } catch {
     done();
-  }
-}
-
-declare global {
-  interface Window {
-    __smartpresStopScanner?: (onDone: () => void) => void;
   }
 }
 
@@ -42,7 +46,7 @@ function extractTokenFromDecoded(decoded: string): string {
 }
 
 export default function AbsenPage() {
-  const router = useRouter();
+  const { getHeaders, clearSession } = useSession();
   const [mode, setMode] = useState<"scan" | "manual">("scan");
   const [manualToken, setManualToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +63,9 @@ export default function AbsenPage() {
       if (extracted) setManualToken(extracted);
       else setPasteError("Clipboard kosong atau bukan teks.");
     } catch {
-      setPasteError("Tidak dapat membaca clipboard. Izinkan akses atau tempel manual (Ctrl+V).");
+      setPasteError(
+        "Tidak dapat membaca clipboard. Izinkan akses atau tempel manual (Ctrl+V)."
+      );
     }
   }, []);
 
@@ -70,36 +76,24 @@ export default function AbsenPage() {
         setMessage({ type: "error", text: "Token tidak boleh kosong." });
         return;
       }
-      if (typeof window === "undefined") return;
-      const sessionCookie = window.localStorage.getItem("sessionCookie");
-      const sessionId = window.localStorage.getItem("sessionId");
-      if (!sessionCookie && !sessionId) {
-        setMessage({ type: "error", text: "Sesi tidak ditemukan. Silakan login lagi." });
-        router.replace("/login");
-        return;
-      }
       setSubmitting(true);
       setMessage(null);
       try {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (sessionCookie) headers["X-Session-Cookie"] = sessionCookie;
-        else if (sessionId) headers["X-Session-Id"] = sessionId;
         const res = await fetch("/api/absen", {
           method: "POST",
-          headers,
+          headers: getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ token: t }),
         });
         const json = await res.json();
         if (res.status === 401) {
-          window.localStorage.removeItem("sessionId");
-          window.localStorage.removeItem("sessionCookie");
-          router.replace("/login");
+          clearSession();
           return;
         }
         if (!res.ok) {
-          setMessage({ type: "error", text: json?.error ?? "Gagal mengirim presensi." });
+          setMessage({
+            type: "error",
+            text: json?.error ?? "Gagal mengirim presensi.",
+          });
           return;
         }
         setMessage({
@@ -113,7 +107,7 @@ export default function AbsenPage() {
         setSubmitting(false);
       }
     },
-    [router]
+    [getHeaders, clearSession]
   );
 
   const startScanner = useCallback(() => {
@@ -130,18 +124,24 @@ export default function AbsenPage() {
           { fps: 10, qrbox: { width: 220, height: 220 } },
           (decodedText) => {
             const token = extractTokenFromDecoded(decodedText);
-            html5QrCode.stop().catch(() => {}).finally(() => {
-              setScanning(false);
-              scannerRef.current = null;
-              submitToken(token);
-            });
+            html5QrCode
+              .stop()
+              .catch(() => {})
+              .finally(() => {
+                setScanning(false);
+                scannerRef.current = null;
+                submitToken(token);
+              });
           },
           () => {}
         )
         .catch((err: Error) => {
           setScanning(false);
           scannerRef.current = null;
-          setMessage({ type: "error", text: "Kamera tidak dapat diakses: " + (err?.message ?? "Unknown") });
+          setMessage({
+            type: "error",
+            text: "Kamera tidak dapat diakses: " + (err?.message ?? "Unknown"),
+          });
         });
     });
   }, [scanning, submitToken]);
@@ -172,15 +172,9 @@ export default function AbsenPage() {
       </p>
 
       {message && (
-        <div
-          className={`mb-4 rounded-xl border p-4 ${
-            message.type === "success"
-              ? "border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-200"
-              : "border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200"
-          }`}
-        >
-          <p className="text-sm font-medium">{message.text}</p>
-        </div>
+        <Alert type={message.type} className="mb-4">
+          {message.text}
+        </Alert>
       )}
 
       <div className="mb-6 flex gap-2">
@@ -217,7 +211,10 @@ export default function AbsenPage() {
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Scan QR Code
           </h2>
-          <div id={SCANNER_ID} className="min-h-[240px] w-full max-w-sm overflow-hidden rounded-lg bg-zinc-900" />
+          <div
+            id={SCANNER_ID}
+            className="min-h-[240px] w-full max-w-sm overflow-hidden rounded-lg bg-zinc-900"
+          />
           {!scanning && (
             <div className="mt-3">
               <button
@@ -241,11 +238,16 @@ export default function AbsenPage() {
             Tempel token dari QR presensi ke kolom di bawah, lalu kirim.
           </p>
           {pasteError && (
-            <p className="mb-3 text-sm text-amber-600 dark:text-amber-400">{pasteError}</p>
+            <p className="mb-3 text-sm text-amber-600 dark:text-amber-400">
+              {pasteError}
+            </p>
           )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
-              <label htmlFor="manual-token" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <label
+                htmlFor="manual-token"
+                className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
                 Token
               </label>
               <div className="flex gap-2">
@@ -253,7 +255,10 @@ export default function AbsenPage() {
                   id="manual-token"
                   type="text"
                   value={manualToken}
-                  onChange={(e) => { setManualToken(e.target.value); setPasteError(null); }}
+                  onChange={(e) => {
+                    setManualToken(e.target.value);
+                    setPasteError(null);
+                  }}
                   onPaste={() => setPasteError(null)}
                   placeholder="Tempel token di sini (Ctrl+V atau tombol Tempel)"
                   className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"

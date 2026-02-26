@@ -1,15 +1,13 @@
-const CLOUDLAB_DASHBOARD_URL = "https://cloudlab.amikom.ac.id/dashboard.php";
+import { resolveSessionCookie, unauthorizedResponse } from "@/app/lib/session";
+import {
+  CLOUDLAB_BASE,
+  BROWSER_HEADERS,
+  stripHtml,
+  isCloudLabLoginPage,
+  isRedirectToLogin,
+} from "@/app/lib/cloudlab";
 
-const BROWSER_HEADERS = {
-  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "accept-language": "en-US,en;q=0.9",
-  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  referer: "https://cloudlab.amikom.ac.id/dashboard.php",
-};
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-}
+const CLOUDLAB_DASHBOARD_URL = `${CLOUDLAB_BASE}/dashboard.php`;
 
 function getAllByClass(html: string, className: string): string[] {
   const escaped = className.replace(/\./g, "\\.");
@@ -25,12 +23,7 @@ function getAllByClass(html: string, className: string): string[] {
   return out;
 }
 
-function parseStatsGrid(html: string): {
-  jamMasuk: string;
-  shift: string;
-  kehadiranBulanIni: string;
-  kehadiranDesc: string;
-} {
+function parseStatsGrid(html: string) {
   const defaultResult = {
     jamMasuk: "—",
     shift: "—",
@@ -50,39 +43,24 @@ function parseStatsGrid(html: string): {
   let shift = statShifts[0]?.trim() || "—";
   shift = shift.replace(/^Shift:\s*/i, "").trim() || "—";
   const kehadiranBulanIni = statValues[1]?.trim() || "—";
-  const kehadiranDesc = statDescs.find((d) => /total\s+hadir/i.test(d))?.trim() || statDescs[1]?.trim() || "Total Hadir";
+  const kehadiranDesc =
+    statDescs.find((d) => /total\s+hadir/i.test(d))?.trim() ||
+    statDescs[1]?.trim() ||
+    "Total Hadir";
 
-  return {
-    jamMasuk,
-    shift,
-    kehadiranBulanIni,
-    kehadiranDesc,
-  };
+  return { jamMasuk, shift, kehadiranBulanIni, kehadiranDesc };
 }
 
 export async function GET(request: Request) {
   try {
-    const sessionCookie = request.headers.get("X-Session-Cookie");
-    const sessionId =
-      request.headers.get("X-Session-Id") ??
-      request.headers.get("cookie")?.match(/PHPSESSID=([^;]+)/)?.[1];
-    let cookie = sessionCookie?.trim() || null;
-    if (!cookie && sessionId) {
-      const sid = sessionId.trim();
-      if (sid.includes("%3A") || sid.length > 50) {
-        cookie = `remember_me=${sid}`;
-      } else {
-        cookie = `PHPSESSID=${sid}`;
-      }
-    }
-    if (!cookie) {
-      return Response.json({ error: "Session required" }, { status: 401 });
-    }
+    const cookie = resolveSessionCookie(request);
+    if (!cookie) return unauthorizedResponse("Session required");
 
     const res = await fetch(CLOUDLAB_DASHBOARD_URL, {
       method: "GET",
       headers: {
         ...BROWSER_HEADERS,
+        referer: CLOUDLAB_DASHBOARD_URL,
         cookie,
       },
       cache: "no-store",
@@ -91,19 +69,7 @@ export async function GET(request: Request) {
 
     const html = await res.text();
 
-    if (res.status === 301 || res.status === 302) {
-      const location = (res.headers.get("location") ?? "").toLowerCase();
-      if (location.includes("login")) {
-        return Response.json({ error: "Sesi tidak valid. Silakan login lagi." }, { status: 401 });
-      }
-    }
-
-    const isLoginPageBody =
-      html.includes("Email atau password salah!") ||
-      (html.includes("<title>") && html.includes("Login - Presensi QR")) ||
-      (html.includes("Masukkan email") &&
-        html.includes("Masukkan password") &&
-        html.includes('name="password"'));
+    if (isRedirectToLogin(res)) return unauthorizedResponse();
 
     if (!res.ok && res.status !== 301 && res.status !== 302) {
       return Response.json(
@@ -112,16 +78,9 @@ export async function GET(request: Request) {
       );
     }
 
-    if (isLoginPageBody) {
-      return Response.json({ error: "Sesi tidak valid. Silakan login lagi." }, { status: 401 });
-    }
+    if (isCloudLabLoginPage(html)) return unauthorizedResponse();
 
-    const stats = parseStatsGrid(html);
-
-    return Response.json({
-      success: true,
-      ...stats,
-    });
+    return Response.json({ success: true, ...parseStatsGrid(html) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error";
     return Response.json({ error: message }, { status: 500 });
