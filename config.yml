@@ -1,0 +1,7 @@
+tunnel: 23940563-08ae-4a23-8582-dab5b4ed24bf
+credentials-file: C:\Users\CCTV SS\.cloudflared\23940563-08ae-4a23-8582-dab5b4ed24bf.json
+
+ingress:
+  - hostname: ss.gpadaka.com
+    service: http://localhost:3000
+  - service: http_status:404

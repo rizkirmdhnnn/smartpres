@@ -1,15 +1,13 @@
-const CLOUDLAB_RIWAYAT_URL = "https://cloudlab.amikom.ac.id/riwayat.php";
+import { resolveSessionCookie, unauthorizedResponse } from "@/app/lib/session";
+import {
+  CLOUDLAB_BASE,
+  BROWSER_HEADERS,
+  stripHtml,
+  isCloudLabLoginPage,
+  isRedirectToLogin,
+} from "@/app/lib/cloudlab";
 
-const BROWSER_HEADERS = {
-  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "accept-language": "en-US,en;q=0.9",
-  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  referer: "https://cloudlab.amikom.ac.id/riwayat.php",
-};
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-}
+const CLOUDLAB_RIWAYAT_URL = `${CLOUDLAB_BASE}/riwayat.php`;
 
 function parseOneTable(tableContent: string): { headers: string[]; rows: string[][] } {
   const headers: string[] = [];
@@ -50,16 +48,12 @@ function parseTableFromHtml(html: string): { headers: string[]; rows: string[][]
     tables.push(m[1]);
   }
 
-  if (tables.length === 0) {
-    return { headers: [], rows: [] };
-  }
+  if (tables.length === 0) return { headers: [], rows: [] };
 
   let best = { headers: [] as string[], rows: [] as string[][] };
   for (const tableContent of tables) {
     const parsed = parseOneTable(tableContent);
-    if (parsed.rows.length > best.rows.length) {
-      best = parsed;
-    }
+    if (parsed.rows.length > best.rows.length) best = parsed;
   }
 
   if (best.rows.length === 0 && tables.length > 0) {
@@ -83,8 +77,12 @@ function parseMiniStats(html: string): Record<string, string> {
   return result;
 }
 
-function parseSummaryBox(html: string): { name: string; nik: string; periode: string } | null {
-  const profileMatch = html.match(/<div[^>]*class="[^"]*profile-info[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+function parseSummaryBox(
+  html: string
+): { name: string; nik: string; periode: string } | null {
+  const profileMatch = html.match(
+    /<div[^>]*class="[^"]*profile-info[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+  );
   if (!profileMatch) return null;
   const inner = profileMatch[1];
   const h3Match = inner.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
@@ -102,20 +100,8 @@ function parseSummaryBox(html: string): { name: string; nik: string; periode: st
 
 export async function GET(request: Request) {
   try {
-    const sessionCookie = request.headers.get("X-Session-Cookie");
-    const sessionId = request.headers.get("X-Session-Id") ?? request.headers.get("cookie")?.match(/PHPSESSID=([^;]+)/)?.[1];
-    let cookie = sessionCookie?.trim() || null;
-    if (!cookie && sessionId) {
-      const sid = sessionId.trim();
-      if (sid.includes("%3A") || sid.length > 50) {
-        cookie = `remember_me=${sid}`;
-      } else {
-        cookie = `PHPSESSID=${sid}`;
-      }
-    }
-    if (!cookie) {
-      return Response.json({ error: "Session required" }, { status: 401 });
-    }
+    const cookie = resolveSessionCookie(request);
+    if (!cookie) return unauthorizedResponse("Session required");
 
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("start_date") ?? "";
@@ -124,10 +110,12 @@ export async function GET(request: Request) {
     const url = new URL(CLOUDLAB_RIWAYAT_URL);
     if (startDate) url.searchParams.set("start_date", startDate);
     if (endDate) url.searchParams.set("end_date", endDate);
+
     const res = await fetch(url.toString(), {
       method: "GET",
       headers: {
         ...BROWSER_HEADERS,
+        referer: CLOUDLAB_RIWAYAT_URL,
         cookie,
       },
       cache: "no-store",
@@ -136,47 +124,20 @@ export async function GET(request: Request) {
 
     const html = await res.text();
 
-    // Redirect to login = session invalid
-    if (res.status === 301 || res.status === 302) {
-      const location = (res.headers.get("location") ?? "").toLowerCase();
-      if (location.includes("login")) {
-        console.log("[history] Redirect to login, session invalid");
-        return Response.json({ error: "Sesi tidak valid. Silakan login lagi." }, { status: 401 });
-      }
-    }
-
-    // Response body is the login page (200 but content is login form)
-    const isLoginPageBody =
-      html.includes("Email atau password salah!") ||
-      (html.includes("<title>") && html.includes("Login - Presensi QR")) ||
-      (html.includes("Masukkan email") && html.includes("Masukkan password") && html.includes('name="password"'));
-
-    console.log("[history] CloudLab response:", {
-      status: res.status,
-      htmlLength: html.length,
-      isLoginPageBody,
-      cookiePrefix: cookie.slice(0, 30) + "...",
-    });
-    if (isLoginPageBody) console.log("[history] Response body (login page):\n", html.slice(0, 1500));
+    if (isRedirectToLogin(res)) return unauthorizedResponse();
 
     if (!res.ok && res.status !== 301 && res.status !== 302) {
-      return Response.json({ error: "Failed to fetch history", status: res.status }, { status: 502 });
+      return Response.json(
+        { error: "Failed to fetch history", status: res.status },
+        { status: 502 }
+      );
     }
 
-    if (isLoginPageBody) {
-      return Response.json({ error: "Sesi tidak valid. Silakan login lagi." }, { status: 401 });
-    }
+    if (isCloudLabLoginPage(html)) return unauthorizedResponse();
 
     const parsed = parseTableFromHtml(html);
     const miniStats = parseMiniStats(html);
     const summaryProfile = parseSummaryBox(html);
-
-    if (parsed.rows.length === 0 && parsed.headers.length === 0) {
-      const tableSnippet = html.includes("<table") ? html.slice(html.indexOf("<table"), html.indexOf("<table") + 600) : "(no table found)";
-      console.log("[history] No table parsed. Snippet:", tableSnippet);
-    } else {
-      console.log("[history] Parsed:", { headerCount: parsed.headers.length, rowCount: parsed.rows.length });
-    }
 
     return Response.json({
       success: true,
