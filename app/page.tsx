@@ -7,7 +7,6 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const sessionId = window.localStorage.getItem("sessionId");
     const sessionCookie = window.localStorage.getItem("sessionCookie");
     if (sessionId || sessionCookie) {

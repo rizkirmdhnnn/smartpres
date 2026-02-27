@@ -1,15 +1,16 @@
-const CLOUDLAB_LOGIN_URL = "https://cloudlab.amikom.ac.id/login.php";
+import { CLOUDLAB_BASE, BROWSER_HEADERS } from "@/app/lib/cloudlab";
 
-const BROWSER_HEADERS = {
-  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "accept-language": "en-US,en;q=0.9",
-  referer: "https://cloudlab.amikom.ac.id/login.php",
-};
+const CLOUDLAB_LOGIN_URL = `${CLOUDLAB_BASE}/login.php`;
 
 function getSetCookieHeaders(r: Response): string[] {
-  if ("getSetCookie" in r.headers && typeof (r.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie === "function") {
-    return (r.headers as Headers & { getSetCookie: () => string[] }).getSetCookie();
+  if (
+    "getSetCookie" in r.headers &&
+    typeof (r.headers as Headers & { getSetCookie?: () => string[] })
+      .getSetCookie === "function"
+  ) {
+    return (
+      r.headers as Headers & { getSetCookie: () => string[] }
+    ).getSetCookie();
   }
   const one = r.headers.get("set-cookie");
   return one ? [one] : [];
@@ -40,20 +41,20 @@ export async function POST(request: Request) {
     const password = body?.password ?? "";
     const cookieParts: string[] = [];
 
-    // Step 1: GET login.php to obtain PHPSESSID (like a browser loading the page)
+    const loginHeaders = {
+      ...BROWSER_HEADERS,
+      referer: CLOUDLAB_LOGIN_URL,
+    };
+
+    // Step 1: GET login.php to obtain PHPSESSID
     const preRes = await fetch(CLOUDLAB_LOGIN_URL, {
       method: "GET",
-      headers: BROWSER_HEADERS,
+      headers: loginHeaders,
       cache: "no-store",
       redirect: "manual",
     });
     await preRes.text();
     collectCookies(preRes, cookieParts);
-
-    console.log("[login] Step 1 (GET login.php):", {
-      status: preRes.status,
-      cookies: cookieParts,
-    });
 
     // Step 2: POST login.php with PHPSESSID + form data
     const formData = new URLSearchParams();
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     const loginRes = await fetch(CLOUDLAB_LOGIN_URL, {
       method: "POST",
       headers: {
-        ...BROWSER_HEADERS,
+        ...loginHeaders,
         "Content-Type": "application/x-www-form-urlencoded",
         cookie: cookieParts.join("; "),
       },
@@ -75,24 +76,21 @@ export async function POST(request: Request) {
     const rawBody = await loginRes.text();
     collectCookies(loginRes, cookieParts);
 
-    console.log("[login] Step 2 (POST login.php):", {
-      status: loginRes.status,
-      cookies: cookieParts,
-      bodySnippet: rawBody.slice(0, 300),
-    });
-
-    const isError = rawBody.includes("alert-error") || rawBody.includes("Email atau password salah!");
+    const isError =
+      rawBody.includes("alert-error") ||
+      rawBody.includes("Email atau password salah!");
 
     // Step 3: Follow redirect to dashboard.php (if 302) with all cookies
     if (!isError && (loginRes.status === 301 || loginRes.status === 302)) {
       const location = loginRes.headers.get("location");
       if (location) {
-        const redirectUrl = location.startsWith("http") ? location : new URL(location, CLOUDLAB_LOGIN_URL).toString();
+        const redirectUrl = location.startsWith("http")
+          ? location
+          : new URL(location, CLOUDLAB_LOGIN_URL).toString();
         const dashRes = await fetch(redirectUrl, {
           method: "GET",
           headers: {
-            ...BROWSER_HEADERS,
-            referer: CLOUDLAB_LOGIN_URL,
+            ...loginHeaders,
             cookie: cookieParts.join("; "),
           },
           cache: "no-store",
@@ -100,16 +98,13 @@ export async function POST(request: Request) {
         });
         await dashRes.text();
         collectCookies(dashRes, cookieParts);
-
-        console.log("[login] Step 3 (GET dashboard.php):", {
-          status: dashRes.status,
-          cookies: cookieParts,
-        });
       }
     }
 
     const sessionCookie = cookieParts.length ? cookieParts.join("; ") : null;
-    const sessionId = getCookieValue(cookieParts, "PHPSESSID") ?? getCookieValue(cookieParts, "remember_me");
+    const sessionId =
+      getCookieValue(cookieParts, "PHPSESSID") ??
+      getCookieValue(cookieParts, "remember_me");
 
     const data = {
       success: !isError,
