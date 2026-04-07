@@ -65,9 +65,12 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+      <h1 className="mb-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Dashboard
       </h1>
+      <p className="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
+        Ringkasan presensi dan kehadiran Anda.
+      </p>
 
       {error && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
@@ -83,7 +86,7 @@ export default function DashboardPage() {
       )}
 
       {loading && !data && (
-        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[32, 40, 40].map((w, i) => (
             <div
               key={i}
@@ -100,7 +103,7 @@ export default function DashboardPage() {
       )}
 
       {(!loading || data) && (
-        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               Presensi Hari Ini

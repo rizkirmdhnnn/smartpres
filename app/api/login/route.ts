@@ -1,121 +1,89 @@
-import { CLOUDLAB_BASE, BROWSER_HEADERS } from "@/app/lib/cloudlab";
+import {
+  CLOUDLAB_URLS,
+  BROWSER_HEADERS,
+  collectCookies,
+  getCookieValue,
+} from "@/lib/cloudlab";
+import { errorJson, withErrorHandler } from "@/lib/api-utils";
 
-const CLOUDLAB_LOGIN_URL = `${CLOUDLAB_BASE}/login.php`;
-
-function getSetCookieHeaders(r: Response): string[] {
-  if (
-    "getSetCookie" in r.headers &&
-    typeof (r.headers as Headers & { getSetCookie?: () => string[] })
-      .getSetCookie === "function"
-  ) {
-    return (
-      r.headers as Headers & { getSetCookie: () => string[] }
-    ).getSetCookie();
+async function handleLogin(request: Request): Promise<Response> {
+  const { email, password } = await request.json();
+  if (!email || !password) {
+    return errorJson("Email dan password wajib diisi.", 400);
   }
-  const one = r.headers.get("set-cookie");
-  return one ? [one] : [];
-}
 
-function collectCookies(r: Response, parts: string[]): void {
-  for (const setCookie of getSetCookieHeaders(r)) {
-    const m = setCookie.match(/^([^=]+)=([^;]+)/);
-    if (m) {
-      const name = m[1].trim();
-      const value = m[2].trim();
-      const idx = parts.findIndex((p) => p.startsWith(name + "="));
-      if (idx >= 0) parts[idx] = `${name}=${value}`;
-      else parts.push(`${name}=${value}`);
-    }
-  }
-}
+  const cookieParts: string[] = [];
 
-function getCookieValue(parts: string[], name: string): string | null {
-  const entry = parts.find((p) => p.startsWith(name + "="));
-  return entry ? entry.slice(name.length + 1) : null;
-}
+  const preRes = await fetch(CLOUDLAB_URLS.login, {
+    method: "GET",
+    headers: BROWSER_HEADERS,
+    cache: "no-store",
+    redirect: "manual",
+  });
+  await preRes.text();
+  collectCookies(preRes, cookieParts);
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const email = body?.email ?? "";
-    const password = body?.password ?? "";
-    const cookieParts: string[] = [];
-
-    const loginHeaders = {
+  const formData = new URLSearchParams({ email, password });
+  const loginRes = await fetch(CLOUDLAB_URLS.login, {
+    method: "POST",
+    headers: {
       ...BROWSER_HEADERS,
-      referer: CLOUDLAB_LOGIN_URL,
-    };
+      "Content-Type": "application/x-www-form-urlencoded",
+      cookie: cookieParts.join("; "),
+    },
+    body: formData.toString(),
+    cache: "no-store",
+    redirect: "manual",
+  });
 
-    // Step 1: GET login.php to obtain PHPSESSID
-    const preRes = await fetch(CLOUDLAB_LOGIN_URL, {
-      method: "GET",
-      headers: loginHeaders,
-      cache: "no-store",
-      redirect: "manual",
-    });
-    await preRes.text();
-    collectCookies(preRes, cookieParts);
+  const rawBody = await loginRes.text();
+  collectCookies(loginRes, cookieParts);
 
-    // Step 2: POST login.php with PHPSESSID + form data
-    const formData = new URLSearchParams();
-    formData.append("email", email);
-    formData.append("password", password);
+  const isError =
+    rawBody.includes("alert-error") ||
+    rawBody.includes("Email atau password salah!");
 
-    const loginRes = await fetch(CLOUDLAB_LOGIN_URL, {
-      method: "POST",
-      headers: {
-        ...loginHeaders,
-        "Content-Type": "application/x-www-form-urlencoded",
-        cookie: cookieParts.join("; "),
-      },
-      body: formData.toString(),
-      cache: "no-store",
-      redirect: "manual",
-    });
+  if (!isError && (loginRes.status === 301 || loginRes.status === 302)) {
+    const location = loginRes.headers.get("location");
+    if (location) {
+      const redirectUrl = location.startsWith("http")
+        ? location
+        : new URL(location, CLOUDLAB_URLS.login).toString();
 
-    const rawBody = await loginRes.text();
-    collectCookies(loginRes, cookieParts);
-
-    const isError =
-      rawBody.includes("alert-error") ||
-      rawBody.includes("Email atau password salah!");
-
-    // Step 3: Follow redirect to dashboard.php (if 302) with all cookies
-    if (!isError && (loginRes.status === 301 || loginRes.status === 302)) {
-      const location = loginRes.headers.get("location");
-      if (location) {
-        const redirectUrl = location.startsWith("http")
-          ? location
-          : new URL(location, CLOUDLAB_LOGIN_URL).toString();
-        const dashRes = await fetch(redirectUrl, {
-          method: "GET",
-          headers: {
-            ...loginHeaders,
-            cookie: cookieParts.join("; "),
-          },
-          cache: "no-store",
-          redirect: "manual",
-        });
-        await dashRes.text();
-        collectCookies(dashRes, cookieParts);
-      }
+      const dashRes = await fetch(redirectUrl, {
+        method: "GET",
+        headers: {
+          ...BROWSER_HEADERS,
+          referer: CLOUDLAB_URLS.login,
+          cookie: cookieParts.join("; "),
+        },
+        cache: "no-store",
+        redirect: "manual",
+      });
+      await dashRes.text();
+      collectCookies(dashRes, cookieParts);
     }
-
-    const sessionCookie = cookieParts.length ? cookieParts.join("; ") : null;
-    const sessionId =
-      getCookieValue(cookieParts, "PHPSESSID") ??
-      getCookieValue(cookieParts, "remember_me");
-
-    const data = {
-      success: !isError,
-      ...(isError && { message: "Email atau password salah!" }),
-      ...(sessionId && !isError && { sessionId }),
-      ...(sessionCookie && !isError && { sessionCookie }),
-    };
-    return Response.json(data, { status: 200 });
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Unexpected error during login";
-    return Response.json({ error: message }, { status: 500 });
   }
+
+  if (isError) {
+    return Response.json(
+      { success: false, message: "Email atau password salah!" },
+      { status: 200 },
+    );
+  }
+
+  const sessionCookie = cookieParts.length
+    ? cookieParts.join("; ")
+    : null;
+  const sessionId =
+    getCookieValue(cookieParts, "PHPSESSID") ??
+    getCookieValue(cookieParts, "remember_me");
+
+  return Response.json({
+    success: true,
+    ...(sessionId && { sessionId }),
+    ...(sessionCookie && { sessionCookie }),
+  });
 }
+
+export const POST = withErrorHandler(handleLogin);

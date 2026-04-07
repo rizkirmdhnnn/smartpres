@@ -1,4 +1,4 @@
-const SSE_URL = "https://cloudlab.amikom.ac.id/realtime_presensi.php";
+import { CLOUDLAB_URLS } from "@/lib/cloudlab";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +10,21 @@ export async function GET() {
       let closed = false;
 
       const safeClose = () => {
-        if (!closed) {
-          closed = true;
-          try { controller.close(); } catch { /* already closed */ }
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
         }
       };
 
       const safeEnqueue = (chunk: Uint8Array) => {
-        if (!closed) {
-          try { controller.enqueue(chunk); } catch { closed = true; }
+        if (closed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true;
         }
       };
 
@@ -27,15 +33,16 @@ export async function GET() {
       };
 
       try {
-        const res = await fetch(SSE_URL, {
+        const res = await fetch(CLOUDLAB_URLS.realtimePresensi, {
           cache: "no-store",
-          headers: {
-            accept: "text/event-stream",
-          },
+          headers: { accept: "text/event-stream" },
         });
 
         if (!res.ok || !res.body) {
-          sendEvent("error", JSON.stringify({ error: "Failed to connect to SSE source" }));
+          sendEvent(
+            "error",
+            JSON.stringify({ error: "Failed to connect to SSE source" }),
+          );
           safeClose();
           return;
         }
@@ -51,17 +58,14 @@ export async function GET() {
               if (done) break;
 
               buffer += decoder.decode(value, { stream: true });
-
               const lines = buffer.split("\n");
               buffer = lines.pop() ?? "";
 
               for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
-
                 if (trimmed.startsWith("data: ")) {
-                  const payload = trimmed.slice(6);
-                  sendEvent("presensi_update", payload);
+                  sendEvent("presensi_update", trimmed.slice(6));
                 }
               }
             }
@@ -74,7 +78,10 @@ export async function GET() {
 
         pump();
       } catch {
-        sendEvent("error", JSON.stringify({ error: "SSE connection failed" }));
+        sendEvent(
+          "error",
+          JSON.stringify({ error: "SSE connection failed" }),
+        );
         safeClose();
       }
     },

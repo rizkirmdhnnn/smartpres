@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "version": "1.0",
+    "lastUpdated": "2026-04-07",
+    "description": "Jadwal shift karyawan CloudLab Amikom"
+  },
+  "shifts": {
+    "Pagi": {
+      "label": "Pagi",
+      "startTime": "06:30",
+      "endTime": "14:30",
+      "graceMinutesBefore": 30,
+      "description": "Shift pagi — 06:30 s.d 14:30"
+    },
+    "Siang": {
+      "label": "Siang",
+      "startTime": "09:30",
+      "endTime": "17:30",
+      "graceMinutesBefore": 30,
+      "description": "Shift siang — 09:30 s.d 17:30"
+    }
+  },
+  "schedule": [
+    {
+      "name": "Nadhif Fauzil Adhim",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Siang",
+        "Rabu": "Siang",
+        "Kamis": "Siang",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Gakkoi",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Siang",
+        "Rabu": "Pagi",
+        "Kamis": "Siang",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Muhammad Ramadhani Subagio",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Pagi",
+        "Rabu": "Pagi",
+        "Kamis": "Pagi",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Ravenusa Arjuna Kristiary",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Siang",
+        "Rabu": "Siang",
+        "Kamis": "Pagi",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Bayu Arief Ramadhan",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Siang",
+        "Rabu": "Siang",
+        "Kamis": "Siang",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Galang Sapto Aji Pangestu",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Pagi",
+        "Rabu": "Siang",
+        "Kamis": "Pagi",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Muhammad Native Muttaqien Kurniadi",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Pagi",
+        "Rabu": "Pagi",
+        "Kamis": "Siang",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Fajri",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Pagi",
+        "Rabu": "Siang",
+        "Kamis": "Pagi",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Achmad Rizki Ramadhan",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Siang",
+        "Rabu": "Pagi",
+        "Kamis": "Pagi",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Dwi Ferdiyanto",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Pagi",
+        "Rabu": "Pagi",
+        "Kamis": "Siang",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Fadhil Maulana",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Siang",
+        "Rabu": "Siang",
+        "Kamis": "Siang",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Gusti Padaka",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Pagi",
+        "Rabu": "Pagi",
+        "Kamis": "Siang",
+        "Jumat": "Pagi"
+      }
+    },
+    {
+      "name": "Nur Fadhlur Rahman",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Siang",
+        "Rabu": "Siang",
+        "Kamis": "Pagi",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Firdaus Lazuardi Batubara",
+      "days": {
+        "Senin": "Pagi",
+        "Selasa": "Pagi",
+        "Rabu": "Pagi",
+        "Kamis": "Siang",
+        "Jumat": "Siang"
+      }
+    },
+    {
+      "name": "Muh Dhimas Prasetya",
+      "days": {
+        "Senin": "Siang",
+        "Selasa": "Siang",
+        "Rabu": "Pagi",
+        "Kamis": "Pagi",
+        "Jumat": "Pagi"
+      }
+    }
+  ]
+}

@@ -36,6 +36,36 @@ export default function DashboardLayout({
       return;
     }
     setAllowed(true);
+
+    let isChecking = false;
+    const verifySession = async () => {
+      if (isChecking) return;
+      isChecking = true;
+      try {
+        const headers: Record<string, string> = {};
+        if (sessionCookie) headers["X-Session-Cookie"] = sessionCookie;
+        else if (sessionId) headers["X-Session-Id"] = sessionId;
+        const res = await fetch("/api/dashboard", { headers });
+        if (res.status === 401) {
+          window.localStorage.removeItem("sessionId");
+          window.localStorage.removeItem("sessionCookie");
+          router.replace("/login?expired=1");
+        }
+      } catch {
+        // ignore network error
+      } finally {
+        isChecking = false;
+      }
+    };
+
+    verifySession();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") verifySession();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [router]);
 
   function handleNavClick(e: React.MouseEvent, href: string) {

@@ -181,6 +181,11 @@ export default function HistoryPage() {
         summary: json.summary ?? undefined,
         summaryProfile: json.summaryProfile ?? undefined,
       });
+      // Persist user name for absen page identity banner
+      const profileName = json.summaryProfile?.name;
+      if (profileName && typeof profileName === "string" && profileName.trim()) {
+        window.localStorage.setItem("smartpres_userName", profileName.trim());
+      }
     } catch {
       setError("Gagal memuat riwayat");
       setData(null);
@@ -200,15 +205,15 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        History
+      <h1 className="mb-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        Riwayat
       </h1>
-      <p className="mb-4 text-zinc-600 dark:text-zinc-400">
+      <p className="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
         Riwayat presensi berdasarkan rentang tanggal.
       </p>
 
-      <div className="mb-6 flex flex-wrap items-end gap-3">
-        <div>
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        <div className="min-w-0">
           <label
             htmlFor="start_date"
             className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
@@ -220,10 +225,10 @@ export default function HistoryPage() {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <label
             htmlFor="end_date"
             className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
@@ -235,14 +240,14 @@ export default function HistoryPage() {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
           />
         </div>
         <button
           type="button"
           onClick={fetchHistory}
           disabled={loading}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 sm:w-auto dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {loading ? "Memuat…" : "Terapkan"}
         </button>
@@ -270,7 +275,7 @@ export default function HistoryPage() {
               {summaryData.name}
             </p>
             <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
-              NIK: {summaryData.nik} | Periode: {summaryData.periode}
+              NIM: {summaryData.nik} | Periode: {summaryData.periode}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg bg-green-50 p-3 dark:bg-green-900/20">

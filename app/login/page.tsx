@@ -21,6 +21,13 @@ export default function LoginPage() {
     setChecking(false);
   }, [router]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("expired=1")) {
+      setError("Sesi Anda telah kedaluwarsa, silakan login kembali.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
